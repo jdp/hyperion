@@ -28,6 +28,14 @@ def add_vertex_test():
 
 
 @with_setup(teardown=teardown)
+def order_test():
+    h.add_vertex()
+    h.add_vertex()
+    h.add_vertex()
+    eq_(h.order(), 3)
+
+
+@with_setup(teardown=teardown)
 def add_named_vertex_test():
     foo = h.add_vertex('foo')
     ok_(h.has_vertex(foo))
@@ -59,3 +67,25 @@ def remove_vertex_test():
     eq_(len(list(v2.edges_in())), 0)
     eq_(len(list(v2.edges_out())), 1)
     eq_(len(list(v3.edges_in())), 1)
+
+
+@with_setup(teardown=teardown)
+def outward_edge_traversal_test():
+    vs = [h.add_vertex() for _ in range(5)]
+    h.add_edge(vs[0], vs[1])
+    h.add_edge(vs[0], vs[2])
+    h.add_edge(vs[0], vs[3])
+    eq_(len(vs[0].out_e), 3)
+    h.add_edge(vs[2], vs[4])
+    eq_(len(vs[0].out_e.in_v.out_e), 1)
+
+
+@with_setup(teardown=teardown)
+def inward_edge_traversal_test():
+    vs = [h.add_vertex() for _ in range(5)]
+    h.add_edge(vs[1], vs[0])
+    h.add_edge(vs[2], vs[0])
+    h.add_edge(vs[3], vs[0])
+    eq_(len(vs[0].in_e), 3)
+    h.add_edge(vs[4], vs[1])
+    eq_(len(vs[0].in_e.out_v.in_e), 1)

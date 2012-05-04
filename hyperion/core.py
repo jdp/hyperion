@@ -1,6 +1,7 @@
 from functools import partial
+from itertools import chain
 
-__all__ = ['Graph', 'Vertex', 'Edge']
+__all__ = ['Graph', 'Vertex', 'Edge', 'VertexSet', 'EdgeSet']
 
 
 class Graph(object):
@@ -33,14 +34,13 @@ class Graph(object):
     def remove_vertex(self, v):
         v = self.get_vertex(v)
         for e in v.edges_out():
-            for e2 in e.tov.edges_in():
-                if e2.fromv == v:
-                    self.r.zrem(self.edge_in_key(e.tov.name), e2.fromv.name)
+            self.remove_edge(e)
         for e in v.edges_in():
-            for e2 in e.fromv.edges_out():
-                if e2.tov == v:
-                    self.r.zrem(self.edge_out_key(e.fromv.name), e2.tov.name)
+            self.remove_edge(e)
         return self.r.srem(self.vertices_key, v.name)
+
+    def order(self):
+        return self.r.scard(self.vertices_key)
 
     def vertices(self):
         vs = self.r.smembers(self.vertices_key)
@@ -65,6 +65,13 @@ class Graph(object):
             pipe.zadd(self.edge_in_key(tov.name), labeled(fromv), weight)
             pipe.execute()
         return Edge(self, fromv, tov)
+
+    def remove_edge(self, e):
+        with self.r.pipeline() as pipe:
+            pipe.zrem(self.edge_in_key(e.tov.name), e.fromv.name)
+            pipe.zrem(self.edge_out_key(e.fromv.name), e.tov.name)
+            pipe.execute()
+        return True
 
     def edges_from(self, v):
         v = self.get_vertex(v)
@@ -100,11 +107,45 @@ class Vertex(object):
     def edges_in(self):
         return self.hyp.edges_to(self)
 
+    @property
+    def in_e(self):
+        return EdgeSet(list(self.edges_in()))
+
+    @property
+    def out_e(self):
+        return EdgeSet(list(self.edges_out()))
+
+    @property
+    def in_v(self):
+        return VertexSet([self]).in_v
+
+    @property
+    def out_v(self):
+        return VertexSet([self]).out_v
+
     def __eq__(self, other):
         return self.name == other.name
 
     def __str__(self):
         return "<Vertex %s>" % self.name
+
+
+class VertexSet(set):
+    @property
+    def in_e(self):
+        return EdgeSet(list(chain(*[v.edges_in() for v in self])))
+
+    @property
+    def out_e(self):
+        return EdgeSet(list(chain(*[v.edges_out() for v in self])))
+
+    @property
+    def in_v(self):
+        return self.in_e.out_v
+
+    @property
+    def out_v(self):
+        return self.out_e.in_v
 
 
 class Edge(object):
@@ -113,6 +154,9 @@ class Edge(object):
         self.fromv = fromv
         self.tov = tov
         self.label = label
+
+    def is_loop(self):
+        return self.fromv == self.tov
 
     def __eq__(self, other):
         if self.fromv.name != other.fromv.name:
@@ -129,3 +173,13 @@ class Edge(object):
         else:
             arrow = "%s-%s->%s" % (self.fromv.name, self.label, self.tov.name)
         return "<Edge %s>" % arrow
+
+
+class EdgeSet(set):
+    @property
+    def in_v(self):
+        return VertexSet(e.tov for e in self)
+
+    @property
+    def out_v(self):
+        return VertexSet(e.fromv for e in self)
