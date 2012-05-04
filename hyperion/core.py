@@ -183,3 +183,7 @@ class EdgeSet(set):
     @property
     def out_v(self):
         return VertexSet(e.fromv for e in self)
+
+    def where(self, test):
+        es = list(self)
+        return EdgeSet(filter(test, es))

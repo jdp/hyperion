@@ -91,3 +91,14 @@ def inward_traversal_test():
     h.add_edge(vs[4], vs[1])
     eq_(len(vs[0].in_e.out_v.in_e), 1)
     eq_(len(vs[0].in_v.in_v), 1)
+
+
+@with_setup(teardown=teardown)
+def edge_filtering_test():
+    vs = [h.add_vertex() for _ in range(5)]
+    h.add_edge(vs[0], vs[1], label='follows')
+    h.add_edge(vs[0], vs[2], label='ignores')
+    h.add_edge(vs[0], vs[3], label='follows')
+    filtered = vs[0].out_e.where(lambda e: e.label == 'follows')
+    ok_(isinstance(filtered, hyperion.EdgeSet))
+    eq_(len(filtered), 2)
