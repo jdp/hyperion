@@ -9,7 +9,9 @@ class Graph(object):
         self.r = r
         self.key_prefix = key_prefix
         self.counter_key = self.make_key('|V|')
-        self.vertices_key = self.make_key('V')
+        self.vertex_key = partial(self.make_key, 'V')
+        self.vertices_key = self.make_key('V(G)')
+        self.edges_key = self.make_key('V(E)')
         self.edge_out_key = partial(self.make_key, 'outE')
         self.edge_in_key = partial(self.make_key, 'inE')
 
@@ -23,6 +25,12 @@ class Graph(object):
         if not self.has_vertex(v):
             raise NameError("vertex %s does not exist" % v)
         return v
+
+    def get_vertex_property(self, v, name):
+        self.r.hget(self.vertex_key(v.name), name)
+
+    def set_vertex_property(self, v, name, value):
+        return self.r.hset(self.vertex_key(v.name), name, value)
 
     def add_vertex(self, name=None):
         if name is None:
@@ -61,13 +69,20 @@ class Graph(object):
             return "%s/%s" % (v.name, str(label))
 
         with self.r.pipeline() as pipe:
+            pipe.sadd(self.edges_key, '%s:%s' % (labeled(fromv), tov.name))
             pipe.zadd(self.edge_out_key(fromv.name), labeled(tov), weight)
             pipe.zadd(self.edge_in_key(tov.name), labeled(fromv), weight)
             pipe.execute()
-        return Edge(self, fromv, tov)
+        return Edge(self, fromv, tov, label=label)
 
     def remove_edge(self, e):
+        def labeled(v):
+            if e.label is None:
+                return v.name
+            return '%s/%s' % (v.name, str(e.label))
+
         with self.r.pipeline() as pipe:
+            pipe.srem(self.edges_key, '%s:%s' % (labeled(e.fromv), e.tov.name))
             pipe.zrem(self.edge_in_key(e.tov.name), e.fromv.name)
             pipe.zrem(self.edge_out_key(e.fromv.name), e.tov.name)
             pipe.execute()
@@ -90,6 +105,16 @@ class Graph(object):
         for e in ine:
             einfo = e.partition("/")
             edge = partial(Edge, self, Vertex(self, einfo[0]), v)
+            if einfo[1] == '':
+                yield edge()
+            else:
+                yield edge(label=einfo[2])
+
+    def edges(self):
+        for e in self.r.smembers(self.edges_key):
+            vertices = e.split(":")
+            einfo = vertices[0].partition("/")
+            edge = partial(Edge, self, Vertex(self, einfo[0]), Vertex(self, vertices[1]))
             if einfo[1] == '':
                 yield edge()
             else:
@@ -123,29 +148,17 @@ class Vertex(object):
     def out_v(self):
         return VertexSet([self]).out_v
 
+    def __getitem__(self, key):
+        return self.hyp.get_vertex_property(self, key)
+
+    def __setitem__(self, key, value):
+        return self.hyp.set_vertex_property(self, key, value)
+
     def __eq__(self, other):
         return self.name == other.name
 
     def __str__(self):
         return "<Vertex %s>" % self.name
-
-
-class VertexSet(set):
-    @property
-    def in_e(self):
-        return EdgeSet(list(chain(*[v.edges_in() for v in self])))
-
-    @property
-    def out_e(self):
-        return EdgeSet(list(chain(*[v.edges_out() for v in self])))
-
-    @property
-    def in_v(self):
-        return self.in_e.out_v
-
-    @property
-    def out_v(self):
-        return self.out_e.in_v
 
 
 class Edge(object):
@@ -175,7 +188,36 @@ class Edge(object):
         return "<Edge %s>" % arrow
 
 
-class EdgeSet(set):
+class ComponentSet(set):
+    def filter(self, fn):
+        return self.__class__(filter(fn, self))
+
+    def map(self, fn):
+        return self.__class__(map(fn, self))
+
+    def reduce(self, fn):
+        return self.__class__(reduce(fn, self))
+
+
+class VertexSet(ComponentSet):
+    @property
+    def in_e(self):
+        return EdgeSet(list(chain(*[v.edges_in() for v in self])))
+
+    @property
+    def out_e(self):
+        return EdgeSet(list(chain(*[v.edges_out() for v in self])))
+
+    @property
+    def in_v(self):
+        return self.in_e.out_v
+
+    @property
+    def out_v(self):
+        return self.out_e.in_v
+
+
+class EdgeSet(ComponentSet):
     @property
     def in_v(self):
         return VertexSet(e.tov for e in self)
@@ -183,7 +225,3 @@ class EdgeSet(set):
     @property
     def out_v(self):
         return VertexSet(e.fromv for e in self)
-
-    def where(self, test):
-        es = list(self)
-        return EdgeSet(filter(test, es))

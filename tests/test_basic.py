@@ -44,6 +44,16 @@ def add_named_vertex_test():
 
 
 @with_setup(teardown=teardown)
+def vertex_property_text():
+    v = h.add_vertex()
+    v['foo'] = 'foo'
+    v['bar'] = 'bar'
+    eq_(v['foo'], 'foo')
+    eq_(v['bar'], 'bar')
+    eq_(v['baz'], None)
+
+
+@with_setup(teardown=teardown)
 def add_edge_test():
     v1 = h.add_vertex()
     v2 = h.add_vertex()
@@ -51,6 +61,7 @@ def add_edge_test():
     eq_(len(list(v1.edges_out())), 1)
     eq_(len(list(v2.edges_in())), 1)
     eq_(list(v1.edges_out())[0], list(v2.edges_in())[0])
+    eq_(len(list(h.edges())), 1)
 
 
 @with_setup(teardown=teardown)
@@ -99,6 +110,6 @@ def edge_filtering_test():
     h.add_edge(vs[0], vs[1], label='follows')
     h.add_edge(vs[0], vs[2], label='ignores')
     h.add_edge(vs[0], vs[3], label='follows')
-    filtered = vs[0].out_e.where(lambda e: e.label == 'follows')
+    filtered = vs[0].out_e.filter(lambda e: e.label == 'follows')
     ok_(isinstance(filtered, hyperion.EdgeSet))
     eq_(len(filtered), 2)
