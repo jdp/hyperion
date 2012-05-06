@@ -16,7 +16,7 @@ class Graph(object):
         self.edge_in_key = partial(self.make_key, 'inE')
 
     def make_key(self, *parts):
-        return ':'.join([self.key_prefix] + list(parts))
+        return ':'.join(chain([self.key_prefix], parts))
 
     def get_vertex(self, v):
         if isinstance(v, Vertex):
