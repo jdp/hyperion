@@ -11,7 +11,7 @@ class Graph(object):
         self.counter_key = self.make_key('|V|')
         self.vertex_key = partial(self.make_key, 'V')
         self.vertices_key = self.make_key('V(G)')
-        self.edges_key = self.make_key('V(E)')
+        self.edges_key = self.make_key('E(G)')
         self.edge_out_key = partial(self.make_key, 'outE')
         self.edge_in_key = partial(self.make_key, 'inE')
 
