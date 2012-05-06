@@ -8,7 +8,7 @@ h = None
 def setup():
     global h
     db = 9
-    h = hyperion.Graph(Redis(db=db))
+    h = hyperion.Graph(Redis(db=db), 'testing')
     if len(h.r.keys('*')) > 0:
         raise RuntimeError("Redis DB %d is not empty" % db)
 

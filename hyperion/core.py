@@ -5,9 +5,9 @@ __all__ = ['Graph', 'Vertex', 'Edge', 'VertexSet', 'EdgeSet']
 
 
 class Graph(object):
-    def __init__(self, r, key_prefix='hyp'):
+    def __init__(self, r, name):
         self.r = r
-        self.key_prefix = key_prefix
+        self.name = name
         self.counter_key = self.make_key('|V|')
         self.vertex_key = partial(self.make_key, 'V')
         self.vertices_key = self.make_key('V(G)')
@@ -16,7 +16,7 @@ class Graph(object):
         self.edge_in_key = partial(self.make_key, 'inE')
 
     def make_key(self, *parts):
-        return ':'.join(chain([self.key_prefix], parts))
+        return ':'.join(chain([self.name], parts))
 
     def get_vertex(self, v):
         if isinstance(v, Vertex):
@@ -122,15 +122,15 @@ class Graph(object):
 
 
 class Vertex(object):
-    def __init__(self, hyp, name):
-        self.hyp = hyp
+    def __init__(self, g, name):
+        self.g = g
         self.name = name
 
     def edges_out(self):
-        return self.hyp.edges_from(self)
+        return self.g.edges_from(self)
 
     def edges_in(self):
-        return self.hyp.edges_to(self)
+        return self.g.edges_to(self)
 
     @property
     def in_e(self):
@@ -149,10 +149,10 @@ class Vertex(object):
         return VertexSet([self]).out_v
 
     def __getitem__(self, key):
-        return self.hyp.get_vertex_property(self, key)
+        return self.g.get_vertex_property(self, key)
 
     def __setitem__(self, key, value):
-        return self.hyp.set_vertex_property(self, key, value)
+        return self.g.set_vertex_property(self, key, value)
 
     def __eq__(self, other):
         return self.name == other.name
@@ -162,8 +162,8 @@ class Vertex(object):
 
 
 class Edge(object):
-    def __init__(self, hyp, fromv, tov, label=None):
-        self.hyp = hyp
+    def __init__(self, g, fromv, tov, label=None):
+        self.g = g
         self.fromv = fromv
         self.tov = tov
         self.label = label
