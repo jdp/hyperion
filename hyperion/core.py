@@ -26,6 +26,9 @@ class Graph(object):
             raise NameError("vertex %s does not exist" % v)
         return v
 
+    def v(self, v):
+        return self.get_vertex(v)
+
     def get_vertex_property(self, v, name):
         self.r.hget(self.vertex_key(v.name), name)
 
@@ -197,6 +200,9 @@ class ComponentSet(set):
 
     def reduce(self, fn):
         return self.__class__(reduce(fn, self))
+
+    def __str__(self):
+        return "<" + self.__class__.__name__ + " " + ", ".join(map(str, self)) + ">"
 
 
 class VertexSet(ComponentSet):
