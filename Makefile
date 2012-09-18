@@ -5,4 +5,4 @@ test:
 	nosetests tests
 
 testdebug:
-	nosetests -s tests
+	nosetests --nocapture tests
