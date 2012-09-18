@@ -64,7 +64,11 @@ def add_edge_test():
     eq_(len(list(v1.edges_out())), 1)
     eq_(len(list(v2.edges_in())), 1)
     eq_(list(v1.edges_out())[0], list(v2.edges_in())[0])
+    ok_(h.edge_between(v1, v2))
+    ok_(h.edge_between(v2, v1))
     eq_(len(list(h.edges())), 1)
+    v3 = h.add_vertex()
+    ok_(h.edge_between(v1, v3) is None)
 
 
 @with_setup(teardown=teardown)

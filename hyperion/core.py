@@ -1,11 +1,12 @@
+import json
 from functools import partial
-from itertools import chain, izip
+from itertools import chain, imap, izip
 
 __all__ = ['Graph', 'Vertex', 'Edge', 'VertexSet', 'EdgeSet']
 
 
 class Graph(object):
-    def __init__(self, r, name):
+    def __init__(self, r, name, encoder=json.dumps, decoder=json.loads):
         self.r = r
         self.name = name
         self.counter_key = self.make_key('|V|')
@@ -13,6 +14,8 @@ class Graph(object):
         self.vertices_key = self.make_key('V(G)')
         self.edges_out_key = partial(self.make_key, 'Eout(V)')
         self.edges_in_key = partial(self.make_key, 'Ein(V)')
+        self._encode = encoder
+        self._decode = decoder
 
     def make_key(self, *parts):
         return ':'.join(chain([self.name], parts))
@@ -64,8 +67,8 @@ class Graph(object):
         fromv = self.get_vertex(fromv)
         tov = self.get_vertex(tov)
         with self.r.pipeline() as pipe:
-            pipe.hset(self.edges_out_key(fromv.name), tov.name, label)
-            pipe.hset(self.edges_in_key(tov.name), fromv.name, label)
+            pipe.hset(self.edges_out_key(fromv.name), tov.name, self._encode(label))
+            pipe.hset(self.edges_in_key(tov.name), fromv.name, self._encode(label))
             pipe.execute()
         return Edge(self, fromv, tov, label=label)
 
@@ -80,15 +83,24 @@ class Graph(object):
         v = self.get_vertex(v)
         names = self.r.hkeys(self.edges_out_key(v.name))
         labels = self.r.hvals(self.edges_out_key(v.name))
-        for name, label in izip(names, labels):
+        for name, label in izip(names, imap(self._decode, labels)):
             yield Edge(self, v, Vertex(self, name), label=label)
 
     def edges_to(self, v):
         v = self.get_vertex(v)
         names = self.r.hkeys(self.edges_in_key(v.name))
         labels = self.r.hvals(self.edges_in_key(v.name))
-        for name, label in izip(names, labels):
+        for name, label in izip(names, imap(self._decode, labels)):
             yield Edge(self, Vertex(self, name), v, label=label)
+
+    def edge_between(self, v1, v2):
+        label = self.r.hget(self.edges_out_key(v1.name), v2.name)
+        if label:
+            return Edge(self, v1, v2, self._decode(label))
+        label = self.r.hget(self.edges_in_key(v1.name), v2.name)
+        if label:
+            return Edge(self, v2, v1, self._decode(label))
+        return None
 
     def edges(self):
         for v in self.vertices():
