@@ -42,10 +42,13 @@ class Graph(object):
         return Vertex(self, name)
 
     def get_vertex_property(self, v, name):
-        self.r.hget(self.vertex_key(v.name), name)
+        value = self.r.hget(self.vertex_key(v.name), name)
+        if not value:
+            raise KeyError(name)
+        return self._decode(value)
 
     def set_vertex_property(self, v, name, value):
-        return self.r.hset(self.vertex_key(v.name), name, value)
+        return self.r.hset(self.vertex_key(v.name), name, self._encode(value))
 
     def remove_vertex(self, v):
         v = self.get_vertex(v)
@@ -150,9 +153,11 @@ class Vertex(object):
         return VertexSet([self]).out_v
 
     def __getitem__(self, key):
+        print "should get", key, "no?"
         return self._g.get_vertex_property(self, key)
 
     def __setitem__(self, key, value):
+        print "should set", key, "to", value
         return self._g.set_vertex_property(self, key, value)
 
     def __eq__(self, other):

@@ -46,13 +46,16 @@ def add_named_vertex_test():
 
 
 @with_setup(teardown=teardown)
-def vertex_property_text():
+def vertex_property_test():
     v = h.add_vertex()
+    ok_(isinstance(v, hyperion.Vertex))
+    h.set_vertex_property(v, 'foo', 'bar')
+    eq_(h.get_vertex_property(v, 'foo'), 'bar')
     v['foo'] = 'foo'
     v['bar'] = 'bar'
     eq_(v['foo'], 'foo')
     eq_(v['bar'], 'bar')
-    eq_(v['baz'], None)
+    raises(lambda: v['baz'], KeyError)
 
 
 @with_setup(teardown=teardown)
