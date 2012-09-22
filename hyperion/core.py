@@ -129,6 +129,12 @@ class Graph(object):
                 yield e
 
     def load_csv(self, filename, chunksize=2000):
+        return self._load_file(filename, chunksize, ',')
+
+    def load_tsv(self, filename, chunksize=2000):
+        return self._load_file(filename, chunksize, '\t')
+
+    def _load_file(self, filename, chunksize, delim):
         def chunker(iterable, n):
             class Filler(object):
                 pass
@@ -139,7 +145,7 @@ class Graph(object):
                     line = line.strip()
                     if line.startswith('#') or not line:
                         continue
-                    fields = map(str.strip, line.split())
+                    fields = map(str.strip, line.split(delim))
                     label = None
                     weight = 1.0
                     if len(fields) == 2:
@@ -155,7 +161,6 @@ class Graph(object):
                     self._store_vertex(pipe, to_id)
                     self._store_edge(pipe, from_id, to_id, self._encode(label), weight)
                 pipe.execute()
-            #break
 
     def __str__(self):
         return "<%s %r>" % (self.__class__.__name__, self.name)

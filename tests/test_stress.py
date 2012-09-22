@@ -20,7 +20,7 @@ def teardown():
 
 
 def dataset_load_test():
-    h.load_csv(os.path.dirname(__file__) + "/data/epinions.txt")
+    h.load_tsv(os.path.dirname(__file__) + "/data/epinions.txt")
     eq_(h.order(), 75879)
     eq_(len(h.v('4').out_v), 76)
     eq_(len(h.v('4').in_v), 125)
