@@ -1,26 +1,30 @@
 import json
 from functools import partial
-from itertools import chain
+from itertools import chain, ifilterfalse, imap, izip_longest
 
 __all__ = ['Graph', 'Vertex', 'Edge', 'VertexSet', 'EdgeSet']
 
 
 class Graph(object):
     def __init__(self, r, name, encoder=json.dumps, decoder=json.loads):
-        self.r = r
-        self.name = name
-        self.counter_key = self.make_key('|V|')
-        self.vertex_key = partial(self.make_key, 'V')
-        self.vertices_key = self.make_key('V(G)')
-        self.labels_out_key = partial(self.make_key, 'L(E(V))', 'out')
-        self.labels_in_key = partial(self.make_key, 'L(E(V))', 'in')
-        self.edges_out_key = partial(self.make_key, 'E(V)', 'out')
-        self.edges_in_key = partial(self.make_key, 'E(V)', 'in')
+        self._r = r
+        self._name = name
+        make_key = lambda *parts: ':'.join(chain([self._name], parts))
+        self._counter_key = make_key('|V|')
+        self._vertex_key = partial(make_key, 'V')
+        self._vertices_key = make_key('V(G)')
+        labels_key = partial(make_key, 'L(E(V))')
+        self._labels_out_key = partial(labels_key, 'out')
+        self._labels_in_key = partial(labels_key, 'in')
+        edges_key = partial(make_key, 'E(V)')
+        self._edges_out_key = partial(edges_key, 'out')
+        self._edges_in_key = partial(edges_key, 'in')
         self._encode = encoder
         self._decode = decoder
 
-    def make_key(self, *parts):
-        return ':'.join(chain([self.name], parts))
+    @property
+    def name(self):
+        return self._name
 
     def get_vertex(self, vertex_or_name):
         v = vertex_or_name
@@ -34,23 +38,26 @@ class Graph(object):
         return self.get_vertex(vertex_or_name)
 
     def has_vertex(self, v):
-        return self.r.sismember(self.vertices_key, v.name)
+        return self._r.sismember(self._vertices_key, v.name)
 
     def add_vertex(self, name=None):
         if name is None:
-            name = str(self.r.incr(self.counter_key))
-        if self.r.sadd(self.vertices_key, name) != 1:
+            name = str(self._r.incr(self._counter_key))
+        if self._store_vertex(self._r, name) != 1:
             raise LookupError("vertex named %s already exists" % name)
         return Vertex(self, name)
 
+    def _store_vertex(self, r, name):
+        return r.sadd(self._vertices_key, name)
+
     def get_vertex_property(self, v, name):
-        value = self.r.hget(self.vertex_key(v.name), name)
+        value = self._r.hget(self._vertex_key(v.name), name)
         if not value:
             raise KeyError(name)
         return self._decode(value)
 
     def set_vertex_property(self, v, name, value):
-        return self.r.hset(self.vertex_key(v.name), name, self._encode(value))
+        return self._r.hset(self._vertex_key(v.name), name, self._encode(value))
 
     def remove_vertex(self, v):
         v = self.get_vertex(v)
@@ -58,57 +65,60 @@ class Graph(object):
             self.remove_edge(e)
         for e in v.edges_in():
             self.remove_edge(e)
-        return self.r.srem(self.vertices_key, v.name)
+        return self._r.srem(self._vertices_key, v.name)
 
     def order(self):
-        return self.r.scard(self.vertices_key)
+        return self._r.scard(self._vertices_key)
 
     def vertices(self):
-        vs = self.r.smembers(self.vertices_key)
+        vs = self._r.smembers(self._vertices_key)
         for v in vs:
             yield Vertex(self, v)
 
     def add_edge(self, fromv, tov, label=None, weight=1.0):
         fromv = self.get_vertex(fromv)
         tov = self.get_vertex(tov)
-        with self.r.pipeline() as pipe:
+        with self._r.pipeline() as pipe:
             encoded_label = self._encode(label)
-            pipe.zincrby(self.labels_out_key(fromv.name), encoded_label, 1)
-            pipe.zadd(self.edges_out_key(fromv.name, encoded_label), tov.name, weight)
-            pipe.zincrby(self.labels_in_key(tov.name), encoded_label, 1)
-            pipe.zadd(self.edges_in_key(tov.name, encoded_label), fromv.name, weight)
+            self._store_edge(pipe, fromv.name, tov.name, encoded_label, weight)
             pipe.execute()
         return Edge(self, fromv, tov, label=label, weight=weight)
 
+    def _store_edge(self, r, from_name, to_name, encoded_label, weight):
+        r.zincrby(self._labels_out_key(from_name), encoded_label, 1)
+        r.zadd(self._edges_out_key(from_name, encoded_label), to_name, weight)
+        r.zincrby(self._labels_in_key(to_name), encoded_label, 1)
+        r.zadd(self._edges_in_key(to_name, encoded_label), from_name, weight)
+
     def remove_edge(self, e):
-        with self.r.pipeline() as pipe:
+        with self._r.pipeline() as pipe:
             encoded_label = self._encode(e.label)
-            pipe.zincrby(self.labels_out_key(e.fromv.name), encoded_label, -1)
-            pipe.zrem(self.edges_out_key(e.fromv.name, encoded_label), e.tov.name)
-            pipe.zincrby(self.labels_in_key(e.tov.name), encoded_label, -1)
-            pipe.zrem(self.edges_in_key(e.tov.name, encoded_label), e.fromv.name)
+            pipe.zincrby(self._labels_out_key(e.fromv.name), encoded_label, -1)
+            pipe.zrem(self._edges_out_key(e.fromv.name, encoded_label), e.tov.name)
+            pipe.zincrby(self._labels_in_key(e.tov.name), encoded_label, -1)
+            pipe.zrem(self._edges_in_key(e.tov.name, encoded_label), e.fromv.name)
             pipe.execute()
         return True
 
     def edges_from(self, v):
         v = self.get_vertex(v)
-        labels = self.r.zrangebyscore(self.labels_out_key(v.name), 1, '+inf')
+        labels = self._r.zrangebyscore(self._labels_out_key(v.name), 1, '+inf')
         for label in labels:
-            for name, weight in self.r.zrangebyscore(self.edges_out_key(v.name, label), '-inf', '+inf', withscores=True):
+            for name, weight in self._r.zrangebyscore(self._edges_out_key(v.name, label), '-inf', '+inf', withscores=True):
                 yield Edge(self, v, Vertex(self, name), label=self._decode(label), weight=weight)
 
     def edges_to(self, v):
         v = self.get_vertex(v)
-        labels = self.r.zrangebyscore(self.labels_in_key(v.name), 1, '+inf')
+        labels = self._r.zrangebyscore(self._labels_in_key(v.name), 1, '+inf')
         for label in labels:
-            for name, weight in self.r.zrangebyscore(self.edges_in_key(v.name, label), '-inf', '+inf', withscores=True):
+            for name, weight in self._r.zrangebyscore(self._edges_in_key(v.name, label), '-inf', '+inf', withscores=True):
                 yield Edge(self, Vertex(self, name), v, label=self._decode(label), weight=weight)
 
     def edge_between(self, v1, v2, label=None):
-        weight = self.r.zscore(self.edges_out_key(v1.name, self._encode(label)), v2.name)
+        weight = self._r.zscore(self._edges_out_key(v1.name, self._encode(label)), v2.name)
         if weight is not None:
             return Edge(self, v1, v2, label, weight)
-        weight = self.r.zscore(self.edges_out_key(v2.name, self._encode(label)), v1.name)
+        weight = self._r.zscore(self._edges_out_key(v2.name, self._encode(label)), v1.name)
         if weight is not None:
             return Edge(self, v2, v1, label, weight)
         return None
@@ -118,11 +128,40 @@ class Graph(object):
             for e in self.edges_from(v):
                 yield e
 
+    def load_csv(self, filename, chunksize=2000):
+        def chunker(iterable, n):
+            class Filler(object):
+                pass
+            return (ifilterfalse(lambda x: x is Filler, chunk) for chunk in (izip_longest(*[iter(iterable)] * n, fillvalue=Filler)))
+        for chunk in imap(tuple, chunker(open(filename), chunksize)):
+            with self._r.pipeline() as pipe:
+                for line in chunk:
+                    line = line.strip()
+                    if line.startswith('#') or not line:
+                        continue
+                    fields = map(str.strip, line.split())
+                    label = None
+                    weight = 1.0
+                    if len(fields) == 2:
+                        from_id, to_id = fields
+                    elif len(fields) == 3:
+                        from_id, label, to_id = fields
+                    elif len(fields) == 4:
+                        from_id, label, to_id, weight = fields
+                        weight = float(weight)
+                    else:
+                        raise RuntimeError("invalid record: %s" % line)
+                    self._store_vertex(pipe, from_id)
+                    self._store_vertex(pipe, to_id)
+                    self._store_edge(pipe, from_id, to_id, self._encode(label), weight)
+                pipe.execute()
+            #break
+
     def __str__(self):
         return "<%s %r>" % (self.__class__.__name__, self.name)
 
     def __repr__(self):
-        return "%s(%r, %r)" % (self.__class__.__name__, self.r, self.name)
+        return "%s(%r, %r)" % (self.__class__.__name__, self._r, self.name)
 
 
 class Vertex(object):

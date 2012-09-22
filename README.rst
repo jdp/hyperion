@@ -2,7 +2,7 @@
 Hyperion
 ========
 
-Hyperion is a graph database built in Python using Redis as the backing data store. It depends on the `redis-py`_ library for interfacing with Redis.
+Hyperion is a Redis-backed graph store for Python. It depends on the `redis-py`_ library for interfacing with Redis.
 
 .. _`redis-py`: http://github.com/andymccurdy/redis-py
 
@@ -14,13 +14,13 @@ Hyperion can be used directly in your Python applications. The API intends to be
 Loading a Graph
 ---------------
 
-Graphs are stored in Redis, and as little metadata is stored as possible. Hyperion makes no distinction between a new and an extant graph. Here is how to instantiate a ``testing`` graph to work with::
+Graphs are stored in Redis. Hyperion makes no distinction between a new and an extant graph. Here is how to instantiate a ``testing`` graph to work with::
 
     >>> from redis import Redis
     >>> from hyperion import Graph
     >>> g = Graph(Redis(), "testing")
 
-From here, vertices and nodes can be added to the graph, and traversals and lookups can be performed.
+From here, vertices and edges can be added to the graph, and traversals and lookups can be performed.
 
 Adding Vertices
 ---------------

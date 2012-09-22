@@ -9,13 +9,13 @@ def setup():
     global h
     db = 9
     h = hyperion.Graph(Redis(db=db), 'testing')
-    if h.r.dbsize() > 0:
+    if h._r.dbsize() > 0:
         raise RuntimeError("Redis DB %d is not empty" % db)
 
 
 def teardown():
     global h
-    h.r.flushdb()
+    h._r.flushdb()
 
 
 @with_setup(teardown=teardown)
